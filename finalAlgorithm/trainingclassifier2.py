@@ -6,34 +6,21 @@ import matplotlib.pyplot as plt
 import torch
 import torchvision
 import torchvision.transforms as transforms
-import hyperopt
-from hyperopt import hp, fmin, tpe, Trials, space_eval, STATUS_OK
 # loading CIFAR 10
 
-# First randomly flip and rotate in order to not overfit to test data
 # transform images in dataset to tensors of normalised range [-1,1]
-train_transform = transforms.Compose([
-    transforms.RandomCrop(32, padding=4),
-    transforms.RandomHorizontalFlip(),
-    transforms.RandomRotation(15),
-    transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
-    transforms.ToTensor(),
-    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-])
+transform = transforms.Compose(
+    [transforms.ToTensor(),
+     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 
-test_transform = transforms.Compose([
-    transforms.ToTensor(),
-    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-])
-
-batch_size = 32
+batch_size = 4
 
 # loading training set and test set
 trainset = torchvision.datasets.CIFAR10(
     root='./data',
     train=True,
     download=True,
-    transform=train_transform)
+    transform=transform)
 trainloader = torch.utils.data.DataLoader(
     trainset,
     batch_size=batch_size,
@@ -44,43 +31,35 @@ testset = torchvision.datasets.CIFAR10(
     root='./data',
     train=False,
     download=True,
-    transform=test_transform)
+    transform=transform)
 testloader = torch.utils.data.DataLoader(
     testset,
     batch_size=batch_size,
     shuffle=False,
     num_workers=0)
 
-classes = ('airplane', 'automobile', 'bird', 'cat',
+classes = ('plane', 'car', 'bird', 'cat',
            'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
 
 class Net(nn.Module):
     def __init__(self):
         super().__init__()
-        # 3 channel input, 16 output channels, 3x3 square convolution
-        self.conv1 = nn.Conv2d(3, 32, 3, padding=1)
-        self.conv2 = nn.Conv2d(16, 32, 3, padding=1)
-        self.conv3 = nn.Conv2d(32, 64, 3, padding=1)
+        # 3 channel input, 6 output channels, 5x5 square convolution
+        self.conv1 = nn.Conv2d(3, 15, 5)
         self.pool = nn.MaxPool2d(2, 2)
-        self.fc1 = nn.Linear(64 * 4 * 4, 256)
-        self.fc2 = nn.Linear(256, 10)
-        self.bn1 = nn.BatchNorm2d(32)
-        self.bn2 = nn.BatchNorm2d(32)
-        self.bn3 = nn.BatchNorm2d(32)
-        self.dropout = nn.Dropout(0.2)
+        self.conv2 = nn.Conv2d(15, 32, 5)
+        self.fc1 = nn.Linear(32 * 5 * 5, 512)
+        self.fc2 = nn.Linear(512, 84)
+        self.fc3 = nn.Linear(84, 10)
 
     def forward(self, x):
-        x = self.pool(F.relu(self.bn1(self.conv1(x))))
-        x = self.pool(F.relu(self.bn2(self.conv2(x))))
-        x = self.pool(F.relu(self.bn3(self.conv3(x))))
-        # x = torch.flatten(x, 1)  # flatten all dimensions except batch
-        x = x.view(-1, 64*4*4)
-        x = self.dropout(x)
+        x = self.pool(F.relu(self.conv1(x)))
+        x = self.pool(F.relu(self.conv2(x)))
+        x = torch.flatten(x, 1)  # flatten all dimensions except batch
         x = F.relu(self.fc1(x))
-        x = self.dropout(x)
         x = F.relu(self.fc2(x))
-
+        x = self.fc3(x)
         return x
 
 
@@ -88,13 +67,12 @@ net = Net()
 
 learning_rate = 0.001
 momentum = 0.9
-epochs = 30
+epochs = 15
 
 # loss function
 criterion = nn.CrossEntropyLoss()
 # gradient descent optimiser
-optimiser = optim.Adam(net.parameters(), lr=learning_rate)
-scheduler = torch.optim.lr_scheduler.StepLR(optimiser, step_size=10, gamma=0.5)
+optimiser = optim.SGD(net.parameters(), lr=learning_rate, momentum=momentum)
 
 
 def train_loop(trainloader, net, criterion, optimiser, epoch_number):
@@ -147,11 +125,7 @@ for t in range(epochs):
     print(f"Epoch {t+1}\n-------------------------------")
     train_loop(trainloader, net, criterion, optimiser, t)
     test_loop(testloader, net, criterion)
-    scheduler.step()
 print('Finished')
 
-
-plt.tight_layout()
-plt.show()
 PATH = './cifar_net.pth'
 torch.save(net.state_dict(), PATH)
