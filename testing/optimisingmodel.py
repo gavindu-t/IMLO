@@ -41,7 +41,7 @@ class NeuralNetwork(nn.Module):
 
 
 model = NeuralNetwork()
-learning_rate = 5e-4
+learning_rate = 1e-3
 batch_size = 32
 epochs = 5
 
@@ -95,7 +95,7 @@ def test_loop(dataloader, model, loss_fn):
 loss_fn = nn.CrossEntropyLoss()
 optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
 
-epochs = 10
+epochs = 15
 for t in range(epochs):
     print(f"Epoch {t+1}\n-------------------------------")
     train_loop(train_dataloader, model, loss_fn, optimizer)
