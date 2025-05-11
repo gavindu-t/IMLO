@@ -10,8 +10,9 @@ import hyperopt
 from hyperopt import hp, fmin, tpe, Trials, space_eval, STATUS_OK
 # loading CIFAR 10
 
-# First randomly flip and rotate in order to not overfit to test data
-# transform images in dataset to tensors of normalised range [-1,1]
+# First randomly flip, rotate, crop and change colour values of image
+# This stops algorithm from overfitting to test data
+# Then transform images in dataset to tensors of normalised range [-1,1]
 train_transform = transforms.Compose([
     transforms.RandomCrop(32, padding=4),
     transforms.RandomHorizontalFlip(),
@@ -21,11 +22,13 @@ train_transform = transforms.Compose([
     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
 ])
 
+# Test images don't get augmented, just normalised
 test_transform = transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
 ])
 
+# 64 training examples in each pass.
 batch_size = 64
 
 # loading training set and test set
@@ -51,6 +54,7 @@ testloader = torch.utils.data.DataLoader(
     shuffle=False,
     num_workers=0)
 
+# Specify image classes
 classes = ('airplane', 'automobile', 'bird', 'cat',
            'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
@@ -58,11 +62,10 @@ classes = ('airplane', 'automobile', 'bird', 'cat',
 class Net(nn.Module):
     def __init__(self):
         super().__init__()
-        # 3 channel input, 16 output channels, 3x3 square convolution
         self.fc1 = nn.Linear(128 * 4 * 4, 256)
         self.fc2 = nn.Linear(256, 10)
         self.dropout = nn.Dropout(0.5)
-
+        #
         self.conv_block1 = nn.Sequential(
             nn.Conv2d(3, 32, 3, padding=1),
             nn.BatchNorm2d(32),
@@ -186,8 +189,8 @@ for epoch in range(epochs):
         trainloader, net, criterion, optimiser, epoch)
     test_loss, test_acc = test_loop(testloader, net, criterion)
     scheduler.step()
-    print(f"Train Loss: {train_loss:.4f}, Acc: {train_acc:.2f}")
-    print(f"Val Loss: {test_loss:.4f}, Acc: {test_acc:.2f}")
+    print(f"Train Loss: {train_loss:.4f}, Acc: {train_acc:.2f}%")
+    print(f"Test Loss: {test_loss:.4f}, Acc: {test_acc:.2f}%")
 
     train_losses.append(train_loss)
     test_losses.append(test_loss)
@@ -198,7 +201,8 @@ for epoch in range(epochs):
     if test_loss < best_test_loss:
         best_test_loss = test_loss
         patience_lost_counter = 0
-        torch.save(net.state_dict(), PATH)  # save best
+        torch.save(net.state_dict(), PATH)
+        print("Best model saved")
     else:
         patience_lost_counter += 1
         print(f"Early stopping counter: {patience_lost_counter}/{patience}")
@@ -211,14 +215,14 @@ plt.figure(figsize=(10, 5))
 
 plt.subplot(1, 2, 1)
 plt.plot(train_losses, label='Train Loss')
-plt.plot(test_losses, label='Val Loss')
+plt.plot(test_losses, label='Test Loss')
 plt.xlabel('Epoch')
 plt.ylabel('Loss')
 plt.legend()
 
 plt.subplot(1, 2, 2)
 plt.plot(train_accs, label='Train Acc')
-plt.plot(test_accs, label='Val Acc')
+plt.plot(test_accs, label='Test Acc')
 plt.xlabel('Epoch')
 plt.ylabel('Accuracy')
 plt.legend()
