@@ -117,9 +117,11 @@ learning_rate = 0.001
 weight_decay = 0.0001
 momentum = 0.9
 epochs = 60
-patience = 5
+
+best_epoch = 0
 best_test_loss = float("inf")
 best_test_acc = 0.0
+patience = 5
 patience_lost_counter = 0
 train_losses, train_accs, test_losses, test_accs = [], [], [], []
 
@@ -209,11 +211,14 @@ for epoch in range(epochs):
 
     # Early stopping logic
     if test_acc > best_test_acc:
+        best_epoch = epoch
         best_test_acc = test_acc
+        best_test_loss = test_loss
         patience_lost_counter = 0
         torch.save(net.state_dict(), PATH)
         print("Best model saved: Accuracy has been increased")
     elif test_loss < best_test_loss:
+        best_epoch = epoch
         best_test_loss = test_loss
         patience_lost_counter = 0
         torch.save(net.state_dict(), PATH)
@@ -224,7 +229,18 @@ for epoch in range(epochs):
         if patience_lost_counter >= patience:
             print("Early stopping triggered.")
             break
-print('Finished')
+print('Finished Training')
+print("------------------")
+print(" MODEL STATISTICS ")
+print(f"Best Epoch: {best_epoch}")
+print("")
+print(f"Train Loss: {train_losses[best_epoch]}")
+print(f"Test Loss: {test_losses[best_epoch]}")
+print("")
+print(f"Train Accuracy: {train_accs[best_epoch]}")
+print(f"Test Accuracy: {test_accs[best_epoch]}")
+print("------------------")
+
 
 plt.figure(figsize=(10, 5))
 
