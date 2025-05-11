@@ -137,6 +137,7 @@ scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
 def train_loop(trainloader, net, criterion, optimiser, epoch_number):
     net.train()
     running_loss = 0.0
+    batch_loss = 0.0
     correct = 0
     total = 0
     for batch, data in enumerate(trainloader):
@@ -155,13 +156,15 @@ def train_loop(trainloader, net, criterion, optimiser, epoch_number):
         # print statistics
         _, predicted = torch.max(outputs, 1)
         total += labels.size(0)
-        running_loss += loss.item()
+        batch_loss += loss.item()
         correct += (predicted == labels).sum().item()
         if batch % 100 == 99:    # print every 100 mini-batches
             print(
-                f'[{epoch_number + 1}, {(batch + 1) * 64:5d}] loss: {running_loss / 100:.3f}')
-            running_loss = 0.0
+                f'[{epoch_number + 1}, {(batch + 1) * 64:5d}] loss: {batch_loss / 100:.3f}')
+            running_loss += batch_loss
+            batch_loss = 0.0
 
+    running_loss += batch_loss
     train_loss = running_loss / len(trainloader)
     train_accuracy = correct / total * 100
     return train_loss, train_accuracy
