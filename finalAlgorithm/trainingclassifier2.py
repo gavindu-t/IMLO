@@ -14,7 +14,7 @@ class Net(nn.Module):
         super().__init__()
         self.fc1 = nn.Linear(128 * 4 * 4, 512)
         self.fc2 = nn.Linear(512, 10)
-        self.dropout = nn.Dropout(0.25)
+        self.dropout = nn.Dropout(0.2)
         #
         self.conv_block1 = nn.Sequential(
             nn.Conv2d(3, 32, 3, padding=1),

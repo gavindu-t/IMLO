@@ -14,7 +14,7 @@ class Net(nn.Module):
         super().__init__()
         self.fc1 = nn.Linear(128 * 4 * 4, 512)
         self.fc2 = nn.Linear(512, 10)
-        self.dropout = nn.Dropout(0.25)
+        self.dropout = nn.Dropout(0.2)
         #
         self.conv_block1 = nn.Sequential(
             nn.Conv2d(3, 32, 3, padding=1),
@@ -133,7 +133,7 @@ if __name__ == "__main__":
         # https://stackoverflow.com/questions/66678052/how-to-calculate-the-mean-and-the-std-of-cifar10-data
         transforms.Normalize([0.4914, 0.4822, 0.4465],
                              [0.2470, 0.2435, 0.2616]),
-        transforms.RandomErasing(0.3, (0.02, 0.25))
+        transforms.RandomErasing(0.25, (0.02, 0.2))
     ])
 
     # Test images don't get augmented, just normalised
@@ -175,14 +175,13 @@ if __name__ == "__main__":
 
     net = Net()
 
-    learning_rate = 0.02
-    weight_decay = 0.005
+    learning_rate = 0.015
+    weight_decay = 0.002
     # momentum = 0.9
 
-    avg_epoch_time = 180
+    avg_epoch_time = 190
     timeout = 60*60*3.93
-    possible_epochs = int(timeout/avg_epoch_time)
-    epochs = min(possible_epochs, 200)
+    epochs = int(timeout/avg_epoch_time)
 
     print(f"Model expected to run for {epochs} epochs")
 
@@ -193,7 +192,7 @@ if __name__ == "__main__":
     patience_lost_counter = 0
     train_losses, train_accs, test_losses, test_accs = [], [], [], []
 
-    PATH = './cifar_best_model7.pth'
+    PATH = './cifar_best_model8.pth'
 
     # loss function
     criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
