@@ -6,20 +6,16 @@ import matplotlib.pyplot as plt
 import torch
 import torchvision
 import torchvision.transforms as transforms
-import hyperopt
-from hyperopt import hp, fmin, tpe, Trials, space_eval, STATUS_OK
 import time
 
 
-# Actual neural network
 class Net(nn.Module):
     def __init__(self):
         super().__init__()
-        # self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.fc1 = nn.Linear(768, 512)
+        self.fc1 = nn.Linear(128 * 4 * 4, 512)
         self.fc2 = nn.Linear(512, 10)
-        self.dropout = nn.Dropout(0.5)
-
+        self.dropout = nn.Dropout(0.25)
+        #
         self.conv_block1 = nn.Sequential(
             nn.Conv2d(3, 32, 3, padding=1),
             nn.BatchNorm2d(32),
@@ -50,23 +46,11 @@ class Net(nn.Module):
             nn.MaxPool2d(2, 2)
         )
 
-        self.conv_block4 = nn.Sequential(
-            nn.Conv2d(128, 192, 3, padding=1),
-            nn.BatchNorm2d(192),
-            nn.ReLU(),
-            nn.Conv2d(192, 192, 3, padding=1),
-            nn.BatchNorm2d(192),
-            nn.ReLU(),
-            nn.MaxPool2d(2, 2)
-        )
-
     def forward(self, x):
         x = self.conv_block1(x)
         x = self.conv_block2(x)
         x = self.conv_block3(x)
-        x = self.conv_block4(x)
-        # x = self.avg_pool(x)
-        x = torch.flatten(x, 1)
+        x = torch.flatten(x, 1)  # flatten all dimensions except batch
         # x = x.view(-1, 128*4*4)
         x = self.dropout(x)
         x = F.relu(self.fc1(x))
@@ -74,7 +58,7 @@ class Net(nn.Module):
         return x
 
 
-def train_loop(trainloader, net, criterion, optimiser, epoch_number):
+def train_loop(trainloader, net, criterion, optimiser, scheduler, batch_size, epoch_number):
     net.train()
     running_loss = 0.0
     batch_loss = 0.0
@@ -92,15 +76,15 @@ def train_loop(trainloader, net, criterion, optimiser, epoch_number):
         # Backpropogation and performs gradient descent step
         loss.backward()
         optimiser.step()
-
+        scheduler.step()
         # print statistics
         _, predicted = torch.max(outputs, 1)
         total += labels.size(0)
         batch_loss += loss.item()
         correct += (predicted == labels).sum().item()
-        if batch % 100 == 99:    # print every 100 mini-batches
+        if batch % 50 == 49:    # print every 100 mini-batches
             print(
-                f'[{epoch_number + 1}, {(batch + 1) * 64:5d}] loss: {batch_loss / 100:.3f}')
+                f'[{epoch_number + 1}, {(batch + 1) * batch_size:5d}] loss: {batch_loss / 50:.3f}')
             running_loss += batch_loss
             batch_loss = 0.0
 
@@ -140,6 +124,8 @@ if __name__ == "__main__":
     # This stops algorithm from overfitting to test data
     # Then transform images in dataset to tensors of normalised range [-1,1]
     train_transform = transforms.Compose([
+        transforms.RandomCrop(32, padding=4, padding_mode='reflect'),
+        transforms.RandomHorizontalFlip(),
         transforms.AutoAugment(transforms.AutoAugmentPolicy.CIFAR10),
         transforms.ToTensor(),
         # Normalised with values of mean and STD of CIFAR10
@@ -147,6 +133,7 @@ if __name__ == "__main__":
         # https://stackoverflow.com/questions/66678052/how-to-calculate-the-mean-and-the-std-of-cifar10-data
         transforms.Normalize([0.4914, 0.4822, 0.4465],
                              [0.2470, 0.2435, 0.2616]),
+        transforms.RandomErasing(0.25)
     ])
 
     # Test images don't get augmented, just normalised
@@ -157,7 +144,7 @@ if __name__ == "__main__":
     ])
 
     # 64 training examples in each pass.
-    batch_size = 64
+    batch_size = 128
 
     # loading training set and test set
     trainset = torchvision.datasets.CIFAR10(
@@ -169,7 +156,7 @@ if __name__ == "__main__":
         trainset,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=2)
+        num_workers=8)
 
     testset = torchvision.datasets.CIFAR10(
         root='./data',
@@ -180,7 +167,7 @@ if __name__ == "__main__":
         testset,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=2)
+        num_workers=8)
 
     # Specify image classes
     classes = ('airplane', 'automobile', 'bird', 'cat',
@@ -188,28 +175,33 @@ if __name__ == "__main__":
 
     net = Net()
 
-    learning_rate = 0.02
-    weight_decay = 0.0005
-    momentum = 0.9
-    epochs = 95
+    learning_rate = 0.01
+    weight_decay = 0.01
+    # momentum = 0.9
 
-    timeout = 60*60*3.9
+    avg_epoch_time = 180
+    timeout = 60*60*3.93
+    possible_epochs = int(timeout/avg_epoch_time)
+    epochs = min(possible_epochs, 200)
+
+    print(f"Model expected to run for {epochs} epochs")
+
     best_epoch = 0
     best_test_loss = float("inf")
     best_test_acc = 0.0
-    patience = 20
+    patience = 15
     patience_lost_counter = 0
     train_losses, train_accs, test_losses, test_accs = [], [], [], []
 
-    PATH = './cifar_best_model4.pth'
+    PATH = './cifar_best_model6.pth'
 
     # loss function
     criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
     # Adam optimiser and learning rate scheduler
-    optimiser = optim.SGD(net.parameters(), lr=learning_rate, momentum=momentum,
-                          weight_decay=weight_decay)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimiser, T_max=epochs)
+    optimiser = optim.AdamW(
+        net.parameters(), lr=learning_rate, weight_decay=weight_decay)
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(
+        optimiser, max_lr=learning_rate, total_steps=epochs * len(trainloader))
 
     for epoch in range(epochs):
         epoch_start_time = time.time()
@@ -219,9 +211,9 @@ if __name__ == "__main__":
         print(f"Current Learning Rate: {current_lr}\n")
 
         train_loss, train_acc = train_loop(
-            trainloader, net, criterion, optimiser, epoch)
+            trainloader, net, criterion, optimiser, scheduler, batch_size, epoch)
         test_loss, test_acc = test_loop(testloader, net, criterion)
-        scheduler.step()
+
         print(f"Train Loss: {train_loss:.4f}, Acc: {train_acc:.2f}%")
         print(f"Test Loss: {test_loss:.4f}, Acc: {test_acc:.2f}%\n")
 
