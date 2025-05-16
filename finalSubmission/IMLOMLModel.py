@@ -12,22 +12,12 @@ import time
 class Net(nn.Module):
     def __init__(self):
         super().__init__()
-        self.fc1 = nn.Linear(128 * 4 * 4, 512)
-        self.fc2 = nn.Linear(512, 10)
-        self.dropout = nn.Dropout(0.2)
+        self.fc1 = nn.Linear(384 * 2 * 2, 768)
+        self.fc2 = nn.Linear(768, 10)
+        self.dropout = nn.Dropout(0.25)
         #
         self.conv_block1 = nn.Sequential(
-            nn.Conv2d(3, 32, 3, padding=1),
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-            nn.Conv2d(32, 32, 3, padding=1),
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-            nn.MaxPool2d(2, 2)
-        )
-
-        self.conv_block2 = nn.Sequential(
-            nn.Conv2d(32, 64, 3, padding=1),
+            nn.Conv2d(3, 64, 3, padding=1),
             nn.BatchNorm2d(64),
             nn.ReLU(),
             nn.Conv2d(64, 64, 3, padding=1),
@@ -36,7 +26,7 @@ class Net(nn.Module):
             nn.MaxPool2d(2, 2)
         )
 
-        self.conv_block3 = nn.Sequential(
+        self.conv_block2 = nn.Sequential(
             nn.Conv2d(64, 128, 3, padding=1),
             nn.BatchNorm2d(128),
             nn.ReLU(),
@@ -46,10 +36,34 @@ class Net(nn.Module):
             nn.MaxPool2d(2, 2)
         )
 
+        self.conv_block3 = nn.Sequential(
+            nn.Conv2d(128, 256, 3, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(),
+            nn.Conv2d(256, 256, 3, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(),
+            nn.MaxPool2d(2, 2)
+        )
+
+        self.conv_block4 = nn.Sequential(
+            nn.Conv2d(256, 384, 3, padding=1),
+            nn.BatchNorm2d(384),
+            nn.ReLU(),
+            nn.Conv2d(384, 384, 3, padding=1),
+            nn.BatchNorm2d(384),
+            nn.ReLU(),
+            nn.Conv2d(384, 384, 3, padding=1),
+            nn.BatchNorm2d(384),
+            nn.ReLU(),
+            nn.MaxPool2d(2, 2)
+        )
+
     def forward(self, x):
         x = self.conv_block1(x)
         x = self.conv_block2(x)
         x = self.conv_block3(x)
+        x = self.conv_block4(x)
         x = torch.flatten(x, 1)  # flatten all dimensions except batch
         # x = x.view(-1, 128*4*4)
         x = self.dropout(x)
@@ -133,7 +147,7 @@ if __name__ == "__main__":
         # https://stackoverflow.com/questions/66678052/how-to-calculate-the-mean-and-the-std-of-cifar10-data
         transforms.Normalize([0.4914, 0.4822, 0.4465],
                              [0.2470, 0.2435, 0.2616]),
-        transforms.RandomErasing(0.4, (0.02, 0.22))
+        transforms.RandomErasing(0.3, (0.02, 0.25))
     ])
 
     # Test images don't get augmented, just normalised
@@ -156,7 +170,7 @@ if __name__ == "__main__":
         trainset,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=8)
+        num_workers=40)
 
     testset = torchvision.datasets.CIFAR10(
         root='./data',
@@ -167,7 +181,7 @@ if __name__ == "__main__":
         testset,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=8)
+        num_workers=40)
 
     # Specify image classes
     classes = ('airplane', 'automobile', 'bird', 'cat',
@@ -175,12 +189,12 @@ if __name__ == "__main__":
 
     net = Net()
 
-    learning_rate = 0.015
+    learning_rate = 0.02
     weight_decay = 0.003
     # momentum = 0.9
 
-    avg_epoch_time = 180
-    timeout = 60*60*3.93
+    avg_epoch_time = 160
+    timeout = 60*60*3.94
     epochs = int(timeout/avg_epoch_time)
 
     print(f"Model expected to run for {epochs} epochs")
@@ -188,11 +202,11 @@ if __name__ == "__main__":
     best_epoch = 0
     best_test_loss = float("inf")
     best_test_acc = 0.0
-    patience = 15
+    patience = 20
     patience_lost_counter = 0
     train_losses, train_accs, test_losses, test_accs = [], [], [], []
 
-    PATH = './cifar_best_model8.pth'
+    PATH = './cifar_best_model10.pth'
 
     # loss function
     criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
@@ -222,9 +236,6 @@ if __name__ == "__main__":
             f"Epoch Run Time: {time.strftime('%M:%S', time.gmtime(epoch_elapsed_time))}")
         print(
             f"Total Elapsed Time: {time.strftime('%H:%M:%S', time.gmtime(total_elapsed_time))}")
-        if total_elapsed_time > timeout:
-            print(f"Training time cap met.")
-            break
 
         train_losses.append(train_loss)
         test_losses.append(test_loss)
@@ -246,6 +257,10 @@ if __name__ == "__main__":
             if patience_lost_counter >= patience:
                 print("Early stopping triggered.")
                 break
+        if total_elapsed_time > timeout:
+            print(f"Training time cap met.")
+            break
+
     print('Finished Training')
     print("------------------")
     print(" MODEL STATISTICS ")
@@ -258,6 +273,8 @@ if __name__ == "__main__":
     print("")
     print(f"Train Accuracy: {train_accs[best_epoch]}")
     print(f"Test Accuracy: {test_accs[best_epoch]}")
+    print("")
+    print(f"Model was saved to {PATH}")
     print("------------------")
 
     plt.figure(figsize=(10, 5))
@@ -278,3 +295,5 @@ if __name__ == "__main__":
 
     plt.tight_layout()
     plt.show()
+    plt.savefig("classifier10graph.png")
+
